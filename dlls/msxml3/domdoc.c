@@ -2898,7 +2898,9 @@ static HRESULT WINAPI domdoc_loadXML(
             if (This->properties->version == MSXML_DEFAULT || This->properties->version == MSXML26)
                 while (*ptr && iswspace(*ptr)) ptr++;
 
-            xmldoc = doparse(This, (char*)ptr, lstrlenW(ptr)*sizeof(WCHAR), XML_CHAR_ENCODING_UTF16LE);
+            /* Handle empty string gracefully - Windows MSXML returns VARIANT_FALSE without error */
+            if (*ptr)
+                xmldoc = doparse(This, (char*)ptr, lstrlenW(ptr)*sizeof(WCHAR), XML_CHAR_ENCODING_UTF16LE);
             if ( !xmldoc )
             {
                 This->error = E_FAIL;
