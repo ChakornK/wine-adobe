@@ -548,6 +548,180 @@ static HRESULT create_dom_parser_ctor(HTMLInnerWindow *script_global, DispatchEx
     return S_OK;
 }
 
+struct xml_serializer {
+    DispatchEx dispex;
+    IXMLSerializer IXMLSerializer_iface;
+};
+
+static inline struct xml_serializer *impl_from_IXMLSerializer(IXMLSerializer *iface)
+{
+    return CONTAINING_RECORD(iface, struct xml_serializer, IXMLSerializer_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(xml_serializer, IXMLSerializer, impl_from_IXMLSerializer(iface)->dispex)
+
+static HRESULT WINAPI xml_serializer_serializeToString(IXMLSerializer *iface, IHTMLDOMNode *node, BSTR *pString)
+{
+    struct xml_serializer *This = impl_from_IXMLSerializer(iface);
+    HTMLDOMNode *dom_node;
+    nsAString nsstr;
+    HRESULT hres;
+
+    TRACE("(%p)->(%p %p)\n", This, node, pString);
+
+    if(!node || !pString)
+        return E_INVALIDARG;
+
+    *pString = NULL;
+
+    dom_node = unsafe_impl_from_IHTMLDOMNode(node);
+    if(!dom_node) {
+        WARN("not an HTMLDOMNode\n");
+        return E_INVALIDARG;
+    }
+
+    nsAString_Init(&nsstr, NULL);
+    hres = nsnode_to_nsstring(dom_node->nsnode, &nsstr);
+    if(SUCCEEDED(hres)) {
+        const WCHAR *str;
+        nsAString_GetData(&nsstr, &str);
+        *pString = SysAllocString(str);
+        if(!*pString)
+            hres = E_OUTOFMEMORY;
+    }
+    nsAString_Finish(&nsstr);
+
+    return hres;
+}
+
+static const IXMLSerializerVtbl xml_serializer_vtbl = {
+    xml_serializer_QueryInterface,
+    xml_serializer_AddRef,
+    xml_serializer_Release,
+    xml_serializer_GetTypeInfoCount,
+    xml_serializer_GetTypeInfo,
+    xml_serializer_GetIDsOfNames,
+    xml_serializer_Invoke,
+    xml_serializer_serializeToString
+};
+
+static inline struct xml_serializer *xml_serializer_from_DispatchEx(DispatchEx *iface)
+{
+    return CONTAINING_RECORD(iface, struct xml_serializer, dispex);
+}
+
+static void *xml_serializer_query_interface(DispatchEx *dispex, REFIID riid)
+{
+    struct xml_serializer *This = xml_serializer_from_DispatchEx(dispex);
+
+    if(IsEqualGUID(&IID_IXMLSerializer, riid))
+        return &This->IXMLSerializer_iface;
+
+    return NULL;
+}
+
+static void xml_serializer_destructor(DispatchEx *dispex)
+{
+    struct xml_serializer *This = xml_serializer_from_DispatchEx(dispex);
+    free(This);
+}
+
+static HRESULT create_xml_serializer_ctor(HTMLInnerWindow *script_global, DispatchEx **ret);
+
+static const dispex_static_data_vtbl_t xml_serializer_dispex_vtbl = {
+    .query_interface  = xml_serializer_query_interface,
+    .destructor       = xml_serializer_destructor,
+};
+
+static const tid_t xml_serializer_iface_tids[] = {
+    IXMLSerializer_tid,
+    0
+};
+
+dispex_static_data_t XMLSerializer_dispex = {
+    .id               = PROT_XMLSerializer,
+    .init_constructor = create_xml_serializer_ctor,
+    .vtbl             = &xml_serializer_dispex_vtbl,
+    .disp_tid         = DispXMLSerializer_tid,
+    .iface_tids       = xml_serializer_iface_tids,
+};
+
+struct xml_serializer_ctor {
+    DispatchEx dispex;
+};
+
+static inline struct xml_serializer_ctor *xml_serializer_ctor_from_DispatchEx(DispatchEx *dispex)
+{
+    return CONTAINING_RECORD(dispex, struct xml_serializer_ctor, dispex);
+}
+
+static void xml_serializer_ctor_destructor(DispatchEx *dispex)
+{
+    struct xml_serializer_ctor *This = xml_serializer_ctor_from_DispatchEx(dispex);
+    free(This);
+}
+
+static HRESULT xml_serializer_ctor_value(DispatchEx *dispex, LCID lcid, WORD flags, DISPPARAMS *params,
+        VARIANT *res, EXCEPINFO *ei, IServiceProvider *caller)
+{
+    struct xml_serializer_ctor *This = xml_serializer_ctor_from_DispatchEx(dispex);
+    HTMLInnerWindow *window;
+    struct xml_serializer *ret;
+
+    TRACE("\n");
+
+    switch(flags) {
+    case DISPATCH_METHOD|DISPATCH_PROPERTYGET:
+        if(!res)
+            return E_INVALIDARG;
+        /* fall through */
+    case DISPATCH_METHOD:
+    case DISPATCH_CONSTRUCT:
+        break;
+    default:
+        FIXME("flags %x not supported\n", flags);
+        return E_NOTIMPL;
+    }
+
+    if(!(ret = calloc(1, sizeof(*ret))))
+        return E_OUTOFMEMORY;
+
+    window = get_script_global(&This->dispex);
+    ret->IXMLSerializer_iface.lpVtbl = &xml_serializer_vtbl;
+
+    init_dispatch(&ret->dispex, &XMLSerializer_dispex, window, dispex_compat_mode(&This->dispex));
+    IHTMLWindow2_Release(&window->base.IHTMLWindow2_iface);
+
+    V_VT(res) = VT_DISPATCH;
+    V_DISPATCH(res) = (IDispatch*)&ret->IXMLSerializer_iface;
+    return S_OK;
+}
+
+static const dispex_static_data_vtbl_t xml_serializer_ctor_dispex_vtbl = {
+    .destructor     = xml_serializer_ctor_destructor,
+    .value          = xml_serializer_ctor_value,
+};
+
+static dispex_static_data_t xml_serializer_ctor_dispex = {
+    .name           = "Function",
+    .constructor_id = PROT_XMLSerializer,
+    .vtbl           = &xml_serializer_ctor_dispex_vtbl,
+};
+
+static HRESULT create_xml_serializer_ctor(HTMLInnerWindow *script_global, DispatchEx **ret)
+{
+    struct xml_serializer_ctor *ctor;
+
+    if(!(ctor = calloc(1, sizeof(*ctor))))
+        return E_OUTOFMEMORY;
+
+    init_dispatch(&ctor->dispex, &xml_serializer_ctor_dispex, script_global,
+                  dispex_compat_mode(&script_global->event_target.dispex));
+
+    *ret = &ctor->dispex;
+    return S_OK;
+}
+
 typedef struct {
     DispatchEx dispex;
     IHTMLScreen IHTMLScreen_iface;

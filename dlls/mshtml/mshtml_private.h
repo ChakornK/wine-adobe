@@ -159,6 +159,7 @@ typedef struct ScriptHost ScriptHost;
     XDIID(DispHTMLWindow2) \
     XDIID(DispHTMLXMLHttpRequest) \
     XDIID(DispXDomainRequest) \
+    XDIID(DispXMLSerializer) \
     XDIID(DispSVGCircleElement) \
     XDIID(DispSVGSVGElement) \
     XDIID(DispSVGTSpanElement) \
@@ -295,6 +296,7 @@ typedef struct ScriptHost ScriptHost;
     XIID(IHTMLXMLHttpRequestFactory) \
     XIID(IHTMLXDomainRequest) \
     XIID(IHTMLXDomainRequestFactory) \
+    XIID(IXMLSerializer) \
     XIID(IOmHistory) \
     XIID(IOmNavigator) \
     XIID(ISVGCircleElement) \
@@ -520,7 +522,8 @@ typedef struct {
     X(Window)                              \
     X(XDomainRequest)                      \
     X(XMLDocument)                         \
-    X(XMLHttpRequest)
+    X(XMLHttpRequest)                      \
+    X(XMLSerializer)
 
 typedef enum {
     PROT_NONE,
