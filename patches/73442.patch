@@ -1,0 +1,27 @@
+From e205438fc6822f358d58bba2c8cf12f5102ec1d2 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Malte=20J=C3=BCrgens?= <maltejur@dismail.de>
+Date: Tue, 8 Nov 2022 19:22:42 +0100
+Subject: [PATCH] gdi32: Make width input of `CreateBitmap` always round up to
+ a multiple of 4
+
+---
+ dlls/gdi32/objects.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/dlls/gdi32/objects.c b/dlls/gdi32/objects.c
+index 42bf6fcf111..6e4343e5c81 100644
+--- a/dlls/gdi32/objects.c
++++ b/dlls/gdi32/objects.c
+@@ -610,6 +610,9 @@ HBITMAP WINAPI CreateBitmap( INT width, INT height, UINT planes,
+     if (!width || !height)
+         return GetStockObject( STOCK_LAST + 1 ); /* default 1x1 bitmap */
+ 
++    if (width % 4 > 0)
++        width += 4 - (width % 4);
++
+     return NtGdiCreateBitmap( width, height, planes, bpp, bits );
+ }
+ 
+-- 
+2.38.1
+

@@ -610,6 +610,9 @@ HBITMAP WINAPI CreateBitmap( INT width, INT height, UINT planes,
     if (!width || !height)
         return GetStockObject( STOCK_LAST + 1 ); /* default 1x1 bitmap */
 
+    if (width % 4 > 0)
+        width += 4 - (width % 4);
+
     return NtGdiCreateBitmap( width, height, planes, bpp, bits );
 }
 
