@@ -1,0 +1,132 @@
+# https://github.com/vinegarhq/kombucha/blob/c6a6d288258951d73c29bb45a301f3965feb98e1/.github/workflows/stable.yml
+
+name: Build Wine
+on: workflow_dispatch
+permissions:
+    contents: write
+env:
+    INSTALL: ${{ github.workspace }}/build
+jobs:
+    build:
+        runs-on: ubuntu-24.04
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@v6
+
+            - name: Install Build Dependencies
+              run: |
+                  sudo apt update -y
+                  sudo apt install -y \
+                    autoconf \
+                    binutils \
+                    bison \
+                    build-essential \
+                    ccache \
+                    flex \
+                    gettext \
+                    git \
+                    libasound2-dev \
+                    libavcodec-dev \
+                    libavformat-dev \
+                    libcapi20-dev \
+                    libcups2-dev \
+                    libfontconfig-dev \
+                    libfreetype-dev \
+                    libgl-dev \
+                    libgnutls28-dev \
+                    libgphoto2-dev \
+                    libgstreamer1.0-dev \
+                    libgstreamer-plugins-base1.0-dev \
+                    libkrb5-dev \
+                    libpcap-dev \
+                    libpcsclite-dev \
+                    libpulse-dev \
+                    libudev-dev \
+                    libunwind-dev \
+                    libusb-1.0-0-dev \
+                    libsane-dev \
+                    libsdl2-dev \
+                    libv4l-dev \
+                    libvulkan-dev \
+                    libwayland-dev \
+                    libx11-dev \
+                    libxcomposite-dev \
+                    libxcursor-dev \
+                    libxext-dev \
+                    libxfixes-dev \
+                    libxi-dev \
+                    libxkbcommon-dev \
+                    libxkbregistry-dev \
+                    libxrandr-dev \
+                    libxrender-dev \
+                    mingw-w64 \
+                    ocl-icd-opencl-dev \
+                    opencl-headers \
+                    samba-dev \
+                    wget
+
+            - name: Install NTSync Header
+              run: |
+                  sudo wget -O /usr/include/linux/ntsync.h \
+                    https://raw.githubusercontent.com/torvalds/linux/refs/tags/v6.14/include/uapi/linux/ntsync.h
+
+            - name: Download FFmpeg 4
+              working-directory: /tmp
+              run: |
+                  git clone --branch n4.4.4 --depth 1 https://git.ffmpeg.org/ffmpeg.git ffmpeg-4.4
+            - name: Build FFmpeg 4
+              working-directory: /tmp/ffmpeg-4.4
+              run: |
+                  export PKG_CONFIG_PATH=/tmp/local/ffmpeg4/lib/pkgconfig
+                  export LIBS="-lOpenCL"
+                  ./configure \
+                    --prefix=/tmp/local/ffmpeg4 \
+                    --enable-shared \
+                    --disable-static \
+                    --disable-asm \
+                    --disable-doc
+                  make -j$(($(nproc) + 1))
+                  sudo make install
+                  sudo ldconfig
+
+            - name: Configure Wine
+              run: |
+                  export CC="ccache gcc"
+                  export CROSSCC="ccache x86_64-w64-mingw32-gcc"
+                  export CROSSCFLAGS="-fno-lto -U_FORTIFY_SOURCE -O2 -pipe -msse4.1"
+                  export CFLAGS="${CROSSCFLAGS} -fcf-protection -fstack-protector-strong -fstack-clash-protection"
+                  export CROSSLDFLAGS="-Wl,-O1,--sort-common,--as-needed"
+                  export LDFLAGS="${CROSSLDFLAGS} -Wl,-z,relro"
+                  export LIBS="-lOpenCL"
+                  export PKG_CONFIG_PATH=/tmp/local/ffmpeg4/lib/pkgconfig
+                  mkdir -p ${{ env.INSTALL }}
+                  ./autogen.sh
+                  ./configure \
+                    --disable-tests \
+                    --disable-win16 \
+                    --enable-archs=i386,x86_64 \
+                    --prefix=${{ env.INSTALL }} \
+                    --with-mingw \
+                    --without-oss
+
+            - name: Configure Ccache
+              uses: hendrikmuhs/ccache-action@v1.2
+
+            - name: Build Wine
+              run: make -j$(($(nproc) + 1))
+
+            - name: Install Wine
+              run: make install-lib
+
+            - name: Publish
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  GH_REPO: ${{ github.repository }}
+              run: |
+                  TAG="$(date --utc +%Y%m%d%H%M%S)"
+                  NAME="wine-adobe-${TAG}"
+                  cd "${{ env.INSTALL }}"/..
+                  mv "${{ env.INSTALL }}" "${NAME}"
+                  rm -rf "${NAME}"/share/{applications,man}
+                  XZ_OPT=-9 tar -Jcf "${NAME}.tar.xz" "${NAME}"
+                  gh release create --generate-notes "${TAG}" "${NAME}.tar.xz"
